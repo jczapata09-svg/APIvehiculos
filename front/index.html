@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Especificaciones de Vehículos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f5f3;
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 140px;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus { border-color: #999; }
+
+    button {
+      padding: 8px 18px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    button:hover:not(:disabled) { background: #f0f0f0; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #estado {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 0.5rem;
+      min-height: 18px;
+    }
+
+    #estado.error { color: #c0392b; }
+
+    .modelo {
+      font-size: 17px;
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+
+    .categoria-label {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #888;
+      margin-bottom: 6px;
+    }
+
+    .categoria-box {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .spec-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 14px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .spec-row:last-child { border-bottom: none; }
+
+    .spec-label { font-size: 13px; color: #666; }
+    .spec-valor { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+
+    .sources {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .sources-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    .sources a {
+      display: block;
+      font-size: 12px;
+      color: #555;
+      text-decoration: none;
+      margin-bottom: 4px;
+    }
+
+    .sources a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Especificaciones técnicas</h1>
+    <p class="subtitle">Ingresa la marca y referencia del vehículo</p>
+
+    <div class="form-row">
+      <input id="marca" type="text" placeholder="Marca — ej: Toyota" />
+      <input id="referencia" type="text" placeholder="Referencia — ej: Corolla 2022" />
+      <button id="btn" onclick="buscar()">Buscar →</button>
+    </div>
+
+    <div id="estado"></div>
+    <div id="resultado"></div>
+  </div>
+
+  <script>
+    const API_URL = "http://localhost:8000/specs";
+
+    function setEstado(msg, isError = false) {
+      const el = document.getElementById('estado');
+      el.textContent = msg;
+      el.className = isError ? 'error' : '';
+    }
+
+    async function buscar() {
+      const marca = document.getElementById('marca').value.trim();
+      const referencia = document.getElementById('referencia').value.trim();
+      const btn = document.getElementById('btn');
+      const resultado = document.getElementById('resultado');
+
+      if (!marca || !referencia) {
+        setEstado('Completa la marca y la referencia.', true);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Buscando...';
+      resultado.innerHTML = '';
+      setEstado('Buscando en Google...');
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ marca, referencia })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || `Error ${res.status}`);
+        }
+
+        setEstado('Analizando con Claude...');
+        const { data, sources } = await res.json();
+        setEstado('');
+
+        if (!data.encontrado) {
+          resultado.innerHTML = `<p style="color:#888; font-size:14px;">${data.mensaje}</p>`;
+          return;
+        }
+
+        let html = `<p class="modelo">${data.modelo}</p>`;
+
+        for (const cat of data.specs) {
+          html += `<p class="categoria-label">${cat.categoria}</p>
+          <div class="categoria-box">`;
+          for (const item of cat.items) {
+            html += `<div class="spec-row">
+              <span class="spec-label">${item.label}</span>
+              <span class="spec-valor">${item.valor}</span>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        if (sources?.length) {
+          html += `<div class="sources">
+            <p class="sources-label">Fuentes</p>`;
+          sources.forEach(s => {
+            html += `<a href="${s.link}" target="_blank" rel="noopener">${s.title}</a>`;
+          });
+          html += `</div>`;
+        }
+
+        resultado.innerHTML = html;
+
+      } catch (e) {
+        setEstado(`Error: ${e.message}`, true);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Buscar →';
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscar();
+    });
+  </script>
+</body>
+</html>
